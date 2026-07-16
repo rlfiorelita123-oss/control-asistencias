@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Asistencias Sincronizado</title>
+    <!-- Tailwind CSS para diseño moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body { background: white; color: black; }
+            .no-print { display: none !important; }
+            .print-area { display: block !important; width: 100%; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <!-- CABECERA -->
+    <header class="bg-indigo-600 text-white p-6 shadow-md no-print">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">Control de Asistencias (Nube)</h1>
+                <p class="text-indigo-100 text-sm mt-1">Sincronizado en tiempo real en todos tus dispositivos</p>
+            </div>
+            <button onclick="window.print()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow transition duration-200 flex items-center gap-2">
+                <span>🖨️ Imprimir Consolidado</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- INDICADOR DE CONEXIÓN -->
+    <div id="statusConexion" class="bg-amber-500 text-white text-center text-xs py-1 font-semibold no-print">
+        Conectando con la base de datos en la nube...
+    </div>
+
+    <!-- PANEL PRINCIPAL -->
+    <main class="max-w-7xl mx-auto p-4 md:p-6 space-y-8 no-print">
+        
+        <!-- SECCIÓN CONFIGURACIÓN -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- CRUD DE MIEMBROS -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">👥 Gestión de Miembros</h2>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="inputMiembro" placeholder="Nombre del miembro" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="agregarMiembro()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">Agregar</button>
+                </div>
+                <ul id="listaMiembros" class="divide-y divide-slate-100 max-h-60 overflow-y-auto"></ul>
+            </div>
+
+            <!-- CRUD DE ENSAYOS / FECHAS -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">📅 Fechas de Ensayos</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                    <input type="date" id="inputFecha" class="sm:col-span-2 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="agregarFecha()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">Agregar</button>
+                </div>
+                <ul id="listaFechas" class="divide-y divide-slate-100 max-h-60 overflow-y-auto"></ul>
+            </div>
+
+        </div>
+
+        <!-- SECCIÓN CONTROL DE ASISTENCIAS -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">📝 Registro de Asistencia</h2>
+                    <p class="text-slate-500 text-sm mt-1">Selecciona la fecha para pasar lista y administrar multas.</p>
+                </div>
+                <select id="selectorSesion" onchange="cargarPlanilla()" class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                    <option value="">Selecciona una fecha...</option>
+                </select>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-bold border-b border-slate-100">
+                            <th class="py-4 px-4">Miembro</th>
+                            <th class="py-4 px-4">¿Asistió?</th>
+                            <th class="py-4 px-4">Permiso</th>
+                            <th class="py-4 px-4">Tardanza (Llegada / Límite)</th>
+                            <th class="py-4 px-4">Multa Calculada</th>
+                            <th class="py-4 px-4">Estado Pago</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaAsistencia" class="divide-y divide-slate-100 text-sm"></tbody>
+                </table>
+                <div id="mensajeSinFecha" class="text-center py-10 text-slate-400">
+                    Por favor, selecciona una fecha de ensayo en el menú de arriba para empezar a registrar.
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN DE CAJA GLOBAL -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <h2 class="text-2xl font-bold text-slate-900 mb-4">📊 Estado de Caja de Multas</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div class="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                    <span class="text-amber-800 text-xs font-bold uppercase">Multas Totales</span>
+                    <h3 id="cajaTotal" class="text-2xl font-extrabold text-amber-950 mt-1">S/. 0.00</h3>
+                </div>
+                <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                    <span class="text-emerald-800 text-xs font-bold uppercase">Total Cobrado</span>
+                    <h3 id="cajaCobrado" class="text-2xl font-extrabold text-emerald-950 mt-1">S/. 0.00</h3>
+                </div>
+                <div class="bg-rose-50 p-4 rounded-xl border border-rose-100">
+                    <span class="text-rose-800 text-xs font-bold uppercase">Total Pendiente</span>
+                    <h3 id="cajaPendiente" class="text-2xl font-extrabold text-rose-950 mt-1">S/. 0.00</h3>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- AREA EXCLUSIVA DE IMPRESIÓN -->
+    <div class="hidden print-area p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold">REPORTE CONSOLIDADO DE ASISTENCIAS Y MULTAS</h1>
+            <p class="text-gray-500">Generado el <span id="print-fecha-actual"></span></p>
+        </div>
+        
+        <table class="w-full text-left mb-8">
+            <thead>
+                <tr class="bg-gray-100 font-bold">
+                    <th>Miembro</th>
+                    <th>Asistencias</th>
+                    <th>Faltas Justificadas</th>
+                    <th>Faltas Injustificadas</th>
+                    <th>Total Deuda</th>
+                    <th>Total Pagado</th>
+                    <th>Total Pendiente</th>
+                </tr>
+            </thead>
+            <tbody id="print-tabla-consolidado"></tbody>
+        </table>
+
+        <div class="grid grid-cols-3 gap-4 border-t pt-4">
+            <div><strong>Caja Acumulada:</strong> <span id="print-total">S/. 0.00</span></div>
+            <div><strong>Caja Recaudada:</strong> <span id="print-recaudado">S/. 0.00</span></div>
+            <div><strong>Por Recaudar:</strong> <span id="print-por-recaudar">S/. 0.00</span></div>
+        </div>
+    </div>
+
+    <!-- CARGA DE LIBRERÍAS DE FIREBASE DESDE CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // ==========================================
+        // ⚠️ REEMPLAZA ESTO CON TUS CREDENCIALES DE FIREBASE
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLWuU2phdqUh6zl-6gApVcCJj17r0pPpU",
+            authDomain: "asistencias-elenco.firebaseapp.com",
+            projectId: "asistencias-elenco",
+            storageBucket: "asistencias-elenco.firebasestorage.app",
+            messagingSenderId: "423688743008",
+            appId: "1:423688743008:web:4a3f253979b9d5a1093b05",
+            measurementId: "G-VP45WPT2YZ"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Variables de estado de la aplicación locales (se sincronizarán con Firebase)
+        let miembros = [];
+        let fechas = [];
+        let asistencias = {};
+
+        // Escuchar estado de conexión
+        const connectedRef = ref(db, ".info/connected");
+        onValue(connectedRef, (snap) => {
+            const statusDiv = document.getElementById("statusConexion");
+            if (snap.val() === true) {
+                statusDiv.innerText = "🟢 Conectado en la nube";
+                statusDiv.className = "bg-emerald-600 text-white text-center text-xs py-1 font-semibold no-print";
+            } else {
+                statusDiv.innerText = "🔴 Desconectado - Trabajando sin conexión";
+                statusDiv.className = "bg-rose-600 text-white text-center text-xs py-1 font-semibold no-print";
+            }
+        });
+
+        // ==========================================
+        // SINCRONIZACIÓN EN TIEMPO REAL CON LA NUBE
+        // ==========================================
+
+        // Escuchar Miembros
+        onValue(ref(db, "miembros"), (snapshot) => {
+            const data = snapshot.val();
+            miembros = [];
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    miembros.push({ id: key, nombre: data[key].nombre });
+                });
+            }
+            renderizarMiembros();
+            cargarPlanilla();
+            renderizarConsolidadoImpresion();
+        });
+
+        // Escuchar Fechas (Sesiones)
+        onValue(ref(db, "fechas"), (snapshot) => {
+            const data = snapshot.val();
+            fechas = [];
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    fechas.push({ id: key, fecha: data[key].fecha });
+                });
+            }
+            renderizarFechas();
+            actualizarSelectorSesion();
+            cargarPlanilla();
+            renderizarConsolidadoImpresion();
+        });
+
+        // Escuchar Asistencias
+        onValue(ref(db, "asistencias"), (snapshot) => {
+            asistencias = snapshot.val() || {};
+            cargarPlanilla();
+            renderizarConsolidadoImpresion();
+        });
+
+        // ==========================================
+        // FUNCIONES GLOBALES ASOCIADAS AL WINDOW (Para uso de botones HTML)
+        // ==========================================
+
+        window.agregarMiembro = function() {
+            const input = document.getElementById('inputMiembro');
+            const nombre = input.value.trim();
+            if (!nombre) return;
+            const nuevoMiembroRef = push(ref(db, "miembros"));
+            set(nuevoMiembroRef, { nombre: nombre });
+            input.value = '';
+        }
+
+        window.editarMiembro = function(id) {
+            const miembro = miembros.find(m => m.id === id);
+            const nuevoNombre = prompt("Editar nombre:", miembro.nombre);
+            if (nuevoNombre && nuevoNombre.trim()) {
+                update(ref(db, `miembros/${id}`), { nombre: nuevoNombre.trim() });
+            }
+        }
+
+        window.eliminarMiembro = function(id) {
+            if (confirm("¿Seguro que deseas eliminar este miembro?")) {
+                remove(ref(db, `miembros/${id}`));
+            }
+        }
+
+        window.agregarFecha = function() {
+            const input = document.getElementById('inputFecha');
+            const fechaStr = input.value;
+            if (!fechaStr) return;
+            const nuevaFechaRef = push(ref(db, "fechas"));
+            set(nuevaFechaRef, { fecha: fechaStr });
+            input.value = '';
+        }
+
+        window.editarFecha = function(id) {
+            const sesion = fechas.find(f => f.id === id);
+            const nuevaFecha = prompt("Editar fecha (AAAA-MM-DD):", sesion.fecha);
+            if (nuevaFecha && nuevaFecha.trim()) {
+                update(ref(db, `fechas/${id}`), { fecha: nuevaFecha.trim() });
+            }
+        }
+
+        window.eliminarFecha = function(id) {
+            if (confirm("¿Seguro de que deseas eliminar este ensayo?")) {
+                remove(ref(db, `fechas/${id}`));
+                remove(ref(db, `asistencias/${id}`));
+            }
+        }
+
+        window.actualizarAsistencia = function(miembroId, sesionId, campo, valor) {
+            const sesion = fechas.find(f => f.id == sesionId);
+            const horaRegular = determinarHoraRegular(sesion.fecha);
+
+            // Obtener el registro actual
+            let reg = {
+                asistio: true,
+                tienePermiso: false,
+                horaIngreso: "",
+                horaPermisoLimite: "",
+                pagada: false,
+                multa: 0
+            };
+
+            if (asistencias[sesionId] && asistencias[sesionId][miembroId]) {
+                reg = { ...asistencias[sesionId][miembroId] };
+            }
+
+            reg[campo] = valor;
+
+            // Calcular Multa
+            reg.multa = calcularMulta(
+                reg.asistio,
+                reg.tienePermiso,
+                reg.horaIngreso,
+                reg.horaPermisoLimite,
+                horaRegular
+            );
+
+            // Guardar cambio en Firebase
+            set(ref(db, `asistencias/${sesionId}/${miembroId}`), reg);
+        }
+
+        // ==========================================
+        // RENDERIZADO Y LÓGICA DE NEGOCIO
+        // ==========================================
+
+        function renderizarMiembros() {
+            const lista = document.getElementById('listaMiembros');
+            lista.innerHTML = miembros.map(m => `
+                <li class="flex justify-between items-center py-2.5">
+                    <span class="font-medium text-slate-700">${m.nombre}</span>
+                    <div class="flex gap-1">
+                        <button onclick="editarMiembro('${m.id}')" class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded text-xs font-semibold">Editar</button>
+                        <button onclick="eliminarMiembro('${m.id}')" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-semibold">Borrar</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function renderizarFechas() {
+            const lista = document.getElementById('listaFechas');
+            lista.innerHTML = fechas.map(f => `
+                <li class="flex justify-between items-center py-2.5">
+                    <span class="font-medium text-slate-700">${f.fecha}</span>
+                    <div class="flex gap-1">
+                        <button onclick="editarFecha('${f.id}')" class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded text-xs font-semibold">Editar</button>
+                        <button onclick="eliminarFecha('${f.id}')" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-semibold">Borrar</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function actualizarSelectorSesion() {
+            const selector = document.getElementById('selectorSesion');
+            const valorActual = selector.value;
+            selector.innerHTML = '<option value="">Selecciona una fecha...</option>' + 
+                fechas.map(f => `<option value="${f.id}">${f.fecha}</option>`).join('');
+            selector.value = valorActual;
+        }
+
+        function determinarHoraRegular(fechaStr) {
+            const fecha = new Date(fechaStr + "T00:00:00");
+            const diaSemana = fecha.getDay(); 
+            if (diaSemana === 0) return "07:30"; 
+            return "20:00"; 
+        }
+
+        function calcularMulta(asistio, tienePermiso, horaIngreso, horaPermisoLimite, horaRegular) {
+            if (!asistio) {
+                return tienePermiso ? 0 : 50;
+            }
+            if (horaIngreso) {
+                const limite = (tienePermiso && horaPermisoLimite) ? horaPermisoLimite : horaRegular;
+                return (horaIngreso > limite) ? 10 : 0;
+            }
+            return 0;
+        }
+
+        window.cargarPlanilla = function() {
+            const sesionId = document.getElementById('selectorSesion').value;
+            const tabla = document.getElementById('tablaAsistencia');
+            const msg = document.getElementById('mensajeSinFecha');
+
+            if (!sesionId) {
+                tabla.innerHTML = "";
+                msg.classList.remove('hidden');
+                actualizarResumenCaja();
+                return;
+            }
+
+            msg.classList.add('hidden');
+            const sesion = fechas.find(f => f.id == sesionId);
+
+            tabla.innerHTML = miembros.map(m => {
+                let reg = {
+                    asistio: true,
+                    tienePermiso: false,
+                    horaIngreso: "",
+                    horaPermisoLimite: "",
+                    pagada: false,
+                    multa: 0
+                };
+
+                if (asistencias[sesionId] && asistencias[sesionId][m.id]) {
+                    reg = asistencias[sesionId][m.id];
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="py-4 px-4 font-semibold text-slate-900">${m.nombre}</td>
+                        <td class="py-4 px-4">
+                            <input type="checkbox" ${reg.asistio ? 'checked' : ''} 
+                                onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'asistio', this.checked)"
+                                class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                        </td>
+                        <td class="py-4 px-4">
+                            <input type="checkbox" ${reg.tienePermiso ? 'checked' : ''} 
+                                onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'tienePermiso', this.checked)"
+                                class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                        </td>
+                        <td class="py-4 px-4 space-y-1">
+                            ${reg.asistio ? `
+                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+                                    <span class="text-xs text-slate-400 w-12">Llegada:</span>
+                                    <input type="time" value="${reg.horaIngreso || ''}" 
+                                        onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'horaIngreso', this.value)"
+                                        class="border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none">
+                                </div>
+                            ` : ''}
+                            ${reg.asistio && reg.tienePermiso ? `
+                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center mt-1">
+                                    <span class="text-xs text-indigo-500 w-12 font-medium">Límite:</span>
+                                    <input type="time" value="${reg.horaPermisoLimite || ''}" 
+                                        onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'horaPermisoLimite', this.value)"
+                                        class="border border-indigo-200 bg-indigo-50 rounded px-1.5 py-0.5 text-xs focus:outline-none">
+                                </div>
+                            ` : ''}
+                            ${!reg.asistio ? '<span class="text-xs text-slate-400">N/A (Faltó)</span>' : ''}
+                        </td>
+                        <td class="py-4 px-4">
+                            <span class="font-bold ${reg.multa > 0 ? 'text-red-500' : 'text-slate-400'}">
+                                S/. ${(reg.multa || 0).toFixed(2)}
+                            </span>
+                        </td>
+                        <td class="py-4 px-4">
+                            ${reg.multa > 0 ? `
+                                <button onclick="actualizarAsistencia('${m.id}', '${sesionId}', 'pagada', ${!reg.pagada})"
+                                    class="text-xs font-bold py-1.5 px-3 rounded-full transition ${reg.pagada ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}">
+                                    ${reg.pagada ? 'PAGADO ✓' : 'DEBE ⚠'}
+                                </button>
+                            ` : '<span class="text-xs text-slate-400">Sin deudas</span>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            actualizarResumenCaja();
+        }
+
+        function actualizarResumenCaja() {
+            let total = 0;
+            let cobrado = 0;
+            let pendiente = 0;
+
+            for (let sId in asistencias) {
+                for (let mId in asistencias[sId]) {
+                    const reg = asistencias[sId][mId];
+                    if (reg.multa > 0) {
+                        total += reg.multa;
+                        if (reg.pagada) cobrado += reg.multa;
+                        else pendiente += reg.multa;
+                    }
+                }
+            }
+
+            document.getElementById('cajaTotal').innerText = `S/. ${total.toFixed(2)}`;
+            document.getElementById('cajaCobrado').innerText = `S/. ${cobrado.toFixed(2)}`;
+            document.getElementById('cajaPendiente').innerText = `S/. ${pendiente.toFixed(2)}`;
+        }
+
+        function renderizarConsolidadoImpresion() {
+            document.getElementById('print-fecha-actual').innerText = new Date().toLocaleDateString('es-PE');
+            const tbody = document.getElementById('print-tabla-consolidado');
+            
+            let totalGeneral = 0;
+            let recaudadoGeneral = 0;
+            let pendienteGeneral = 0;
+
+            tbody.innerHTML = miembros.map(m => {
+                let asistioCount = 0;
+                let faltasJustificadas = 0;
+                let faltasInjustificadas = 0;
+                let deudaMiembro = 0;
+                let pagadoMiembro = 0;
+
+                for (let sId in asistencias) {
+                    const reg = asistencias[sId][m.id];
+                    if (reg) {
+                        if (reg.asistio) asistioCount++;
+                        else if (reg.tienePermiso) faltasJustificadas++;
+                        else faltasInjustificadas++;
+
+                        if (reg.multa > 0) {
+                            deudaMiembro += reg.multa;
+                            if (reg.pagada) pagadoMiembro += reg.multa;
+                        }
+                    }
+                }
+
+                let pendienteMiembro = deudaMiembro - pagadoMiembro;
+
+                totalGeneral += deudaMiembro;
+                recaudadoGeneral += pagadoMiembro;
+                pendienteGeneral += pendienteMiembro;
+
+                return `
+                    <tr>
+                        <td style="font-weight: bold;">${m.nombre}</td>
+                        <td>${asistioCount}</td>
+                        <td>${faltasJustificadas}</td>
+                        <td>${faltasInjustificadas}</td>
+                        <td style="color: red; font-weight: bold;">S/. ${deudaMiembro.toFixed(2)}</td>
+                        <td style="color: green;">S/. ${pagadoMiembro.toFixed(2)}</td>
+                        <td style="color: ${pendienteMiembro > 0 ? 'red' : 'gray'}">S/. ${pendienteMiembro.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('print-total').innerText = `S/. ${totalGeneral.toFixed(2)}`;
+            document.getElementById('print-recaudado').innerText = `S/. ${recaudadoGeneral.toFixed(2)}`;
+            document.getElementById('print-por-recaudar').innerText = `S/. ${pendienteGeneral.toFixed(2)}`;
+        }
+    </script>
+</body>
+</html>
