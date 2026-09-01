@@ -54,7 +54,9 @@
 
             <!-- CRUD DE ENSAYOS / FECHAS -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">📅 Fechas de Ensayos</h2>
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    📅 Fechas de Ensayos <span id="contadorEnsayos" class="text-sm font-semibold bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full ml-1">(0)</span>
+                </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                     <input type="date" id="inputFecha" class="sm:col-span-2 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <button onclick="agregarFecha()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">Agregar</button>
@@ -211,6 +213,8 @@
                 Object.keys(data).forEach(key => {
                     miembros.push({ id: key, nombre: data[key].nombre });
                 });
+                // ORDENAR MIEMBROS ALFABÉTICAMENTE
+                miembros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
             }
             renderizarMiembros();
             actualizarSelectorMiembro();
@@ -225,6 +229,8 @@
                 Object.keys(data).forEach(key => {
                     fechas.push({ id: key, fecha: data[key].fecha });
                 });
+                // ORDENAR FECHAS DE MENOR A MAYOR (CRONOLÓGICO)
+                fechas.sort((a, b) => a.fecha.localeCompare(b.fecha));
             }
             renderizarFechas();
             actualizarSelectorSesion();
@@ -360,6 +366,9 @@
         }
 
         function renderizarFechas() {
+            // Actualizar el contador de ensayos
+            document.getElementById('contadorEnsayos').innerText = `(${fechas.length})`;
+
             const lista = document.getElementById('listaFechas');
             lista.innerHTML = fechas.map(f => `
                 <li class="flex justify-between items-center py-2.5">
@@ -427,7 +436,6 @@
                 const sesion = fechas.find(f => f.id == sesionId);
 
                 tabla.innerHTML = miembros.map(m => {
-                    // asistio en false por defecto para desmarcar
                     let reg = {
                         asistio: false,
                         tienePermiso: false,
