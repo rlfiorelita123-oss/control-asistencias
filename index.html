@@ -69,18 +69,31 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">📝 Registro de Asistencia</h2>
-                    <p class="text-slate-500 text-sm mt-1">Selecciona la fecha para pasar lista y administrar multas.</p>
+                    <p class="text-slate-500 text-sm mt-1">Filtra por fecha para pasar lista o por miembro para ver su historial individual.</p>
                 </div>
-                <select id="selectorSesion" onchange="cargarPlanilla()" class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500">
-                    <option value="">Selecciona una fecha...</option>
-                </select>
+                
+                <!-- SELECTORES DE FILTRO -->
+                <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <div class="flex flex-col">
+                        <label class="text-xs font-bold text-slate-500 mb-1">Por Fecha (Pasar Lista):</label>
+                        <select id="selectorSesion" onchange="seleccionarFecha(this.value)" class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Selecciona una fecha...</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-xs font-bold text-slate-500 mb-1">Por Miembro (Historial):</label>
+                        <select id="selectorMiembro" onchange="seleccionarMiembro(this.value)" class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Buscar miembro...</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-bold border-b border-slate-100">
-                            <th class="py-4 px-4">Miembro</th>
+                            <th id="thColumnaPrincipal" class="py-4 px-4">Miembro / Fecha</th>
                             <th class="py-4 px-4">¿Asistió?</th>
                             <th class="py-4 px-4">Permiso</th>
                             <th class="py-4 px-4">Tardanza (Llegada / Límite)</th>
@@ -91,7 +104,7 @@
                     <tbody id="tablaAsistencia" class="divide-y divide-slate-100 text-sm"></tbody>
                 </table>
                 <div id="mensajeSinFecha" class="text-center py-10 text-slate-400">
-                    Por favor, selecciona una fecha de ensayo en el menú de arriba para empezar a registrar.
+                    Por favor, selecciona una fecha para pasar lista o un miembro para revisar su historial.
                 </div>
             </div>
         </div>
@@ -152,7 +165,7 @@
         import { getDatabase, ref, set, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         // ==========================================
-        // ⚠️ REEMPLAZA ESTO CON TUS CREDENCIALES DE FIREBASE
+        // CREDENCIALES DE FIREBASE
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyBLWuU2phdqUh6zl-6gApVcCJj17r0pPpU",
@@ -168,10 +181,11 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Variables de estado de la aplicación locales (se sincronizarán con Firebase)
+        // Variables de estado
         let miembros = [];
         let fechas = [];
         let asistencias = {};
+        let modoFiltro = "fecha"; // "fecha" o "miembro"
 
         // Escuchar estado de conexión
         const connectedRef = ref(db, ".info/connected");
@@ -187,10 +201,9 @@
         });
 
         // ==========================================
-        // SINCRONIZACIÓN EN TIEMPO REAL CON LA NUBE
+        // SINCRONIZACIÓN EN TIEMPO REAL
         // ==========================================
 
-        // Escuchar Miembros
         onValue(ref(db, "miembros"), (snapshot) => {
             const data = snapshot.val();
             miembros = [];
@@ -200,11 +213,11 @@
                 });
             }
             renderizarMiembros();
+            actualizarSelectorMiembro();
             cargarPlanilla();
             renderizarConsolidadoImpresion();
         });
 
-        // Escuchar Fechas (Sesiones)
         onValue(ref(db, "fechas"), (snapshot) => {
             const data = snapshot.val();
             fechas = [];
@@ -219,7 +232,6 @@
             renderizarConsolidadoImpresion();
         });
 
-        // Escuchar Asistencias
         onValue(ref(db, "asistencias"), (snapshot) => {
             asistencias = snapshot.val() || {};
             cargarPlanilla();
@@ -227,7 +239,27 @@
         });
 
         // ==========================================
-        // FUNCIONES GLOBALES ASOCIADAS AL WINDOW (Para uso de botones HTML)
+        // FUNCIONES DE MANEJO DE FILTROS Y NAVEGACIÓN
+        // ==========================================
+
+        window.seleccionarFecha = function(val) {
+            if (val) {
+                document.getElementById('selectorMiembro').value = "";
+                modoFiltro = "fecha";
+            }
+            cargarPlanilla();
+        }
+
+        window.seleccionarMiembro = function(val) {
+            if (val) {
+                document.getElementById('selectorSesion').value = "";
+                modoFiltro = "miembro";
+            }
+            cargarPlanilla();
+        }
+
+        // ==========================================
+        // FUNCIONES GLOBALES DE CONFIGURACIÓN
         // ==========================================
 
         window.agregarMiembro = function() {
@@ -281,14 +313,14 @@
             const sesion = fechas.find(f => f.id == sesionId);
             const horaRegular = determinarHoraRegular(sesion.fecha);
 
-            // Obtener el registro actual
+            // Registro base con asistio: false por defecto
             let reg = {
-                asistio: true,
+                asistio: false,
                 tienePermiso: false,
                 horaIngreso: "",
                 horaPermisoLimite: "",
                 pagada: false,
-                multa: 0
+                multa: 50 // Multa inicial por falta no justificada
             };
 
             if (asistencias[sesionId] && asistencias[sesionId][miembroId]) {
@@ -348,6 +380,14 @@
             selector.value = valorActual;
         }
 
+        function actualizarSelectorMiembro() {
+            const selector = document.getElementById('selectorMiembro');
+            const valorActual = selector.value;
+            selector.innerHTML = '<option value="">Buscar miembro...</option>' + 
+                miembros.map(m => `<option value="${m.id}">${m.nombre}</option>`).join('');
+            selector.value = valorActual;
+        }
+
         function determinarHoraRegular(fechaStr) {
             const fecha = new Date(fechaStr + "T00:00:00");
             const diaSemana = fecha.getDay(); 
@@ -368,10 +408,12 @@
 
         window.cargarPlanilla = function() {
             const sesionId = document.getElementById('selectorSesion').value;
+            const miembroId = document.getElementById('selectorMiembro').value;
             const tabla = document.getElementById('tablaAsistencia');
             const msg = document.getElementById('mensajeSinFecha');
+            const thColumnaPrincipal = document.getElementById('thColumnaPrincipal');
 
-            if (!sesionId) {
+            if (!sesionId && !miembroId) {
                 tabla.innerHTML = "";
                 msg.classList.remove('hidden');
                 actualizarResumenCaja();
@@ -379,72 +421,102 @@
             }
 
             msg.classList.add('hidden');
-            const sesion = fechas.find(f => f.id == sesionId);
 
-            tabla.innerHTML = miembros.map(m => {
-                let reg = {
-                    asistio: true,
-                    tienePermiso: false,
-                    horaIngreso: "",
-                    horaPermisoLimite: "",
-                    pagada: false,
-                    multa: 0
-                };
+            if (modoFiltro === "fecha" && sesionId) {
+                thColumnaPrincipal.innerText = "Miembro";
+                const sesion = fechas.find(f => f.id == sesionId);
 
-                if (asistencias[sesionId] && asistencias[sesionId][m.id]) {
-                    reg = asistencias[sesionId][m.id];
-                }
+                tabla.innerHTML = miembros.map(m => {
+                    // asistio en false por defecto para desmarcar
+                    let reg = {
+                        asistio: false,
+                        tienePermiso: false,
+                        horaIngreso: "",
+                        horaPermisoLimite: "",
+                        pagada: false,
+                        multa: 50
+                    };
 
-                return `
-                    <tr class="hover:bg-slate-50 transition">
-                        <td class="py-4 px-4 font-semibold text-slate-900">${m.nombre}</td>
-                        <td class="py-4 px-4">
-                            <input type="checkbox" ${reg.asistio ? 'checked' : ''} 
-                                onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'asistio', this.checked)"
-                                class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
-                        </td>
-                        <td class="py-4 px-4">
-                            <input type="checkbox" ${reg.tienePermiso ? 'checked' : ''} 
-                                onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'tienePermiso', this.checked)"
-                                class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
-                        </td>
-                        <td class="py-4 px-4 space-y-1">
-                            ${reg.asistio ? `
-                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-                                    <span class="text-xs text-slate-400 w-12">Llegada:</span>
-                                    <input type="time" value="${reg.horaIngreso || ''}" 
-                                        onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'horaIngreso', this.value)"
-                                        class="border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none">
-                                </div>
-                            ` : ''}
-                            ${reg.asistio && reg.tienePermiso ? `
-                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center mt-1">
-                                    <span class="text-xs text-indigo-500 w-12 font-medium">Límite:</span>
-                                    <input type="time" value="${reg.horaPermisoLimite || ''}" 
-                                        onchange="actualizarAsistencia('${m.id}', '${sesionId}', 'horaPermisoLimite', this.value)"
-                                        class="border border-indigo-200 bg-indigo-50 rounded px-1.5 py-0.5 text-xs focus:outline-none">
-                                </div>
-                            ` : ''}
-                            ${!reg.asistio ? '<span class="text-xs text-slate-400">N/A (Faltó)</span>' : ''}
-                        </td>
-                        <td class="py-4 px-4">
-                            <span class="font-bold ${reg.multa > 0 ? 'text-red-500' : 'text-slate-400'}">
-                                S/. ${(reg.multa || 0).toFixed(2)}
-                            </span>
-                        </td>
-                        <td class="py-4 px-4">
-                            ${reg.multa > 0 ? `
-                                <button onclick="actualizarAsistencia('${m.id}', '${sesionId}', 'pagada', ${!reg.pagada})"
-                                    class="text-xs font-bold py-1.5 px-3 rounded-full transition ${reg.pagada ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}">
-                                    ${reg.pagada ? 'PAGADO ✓' : 'DEBE ⚠'}
-                                </button>
-                            ` : '<span class="text-xs text-slate-400">Sin deudas</span>'}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
+                    if (asistencias[sesionId] && asistencias[sesionId][m.id]) {
+                        reg = asistencias[sesionId][m.id];
+                    }
+
+                    return generarFilaTabla(m.nombre, m.id, sesionId, reg);
+                }).join('');
+
+            } else if (modoFiltro === "miembro" && miembroId) {
+                thColumnaPrincipal.innerText = "Fecha de Ensayo";
+                const miembro = miembros.find(m => m.id == miembroId);
+
+                tabla.innerHTML = fechas.map(f => {
+                    let reg = {
+                        asistio: false,
+                        tienePermiso: false,
+                        horaIngreso: "",
+                        horaPermisoLimite: "",
+                        pagada: false,
+                        multa: 50
+                    };
+
+                    if (asistencias[f.id] && asistencias[f.id][miembroId]) {
+                        reg = asistencias[f.id][miembroId];
+                    }
+
+                    return generarFilaTabla(f.fecha, miembroId, f.id, reg);
+                }).join('');
+            }
 
             actualizarResumenCaja();
+        }
+
+        function generarFilaTabla(etiquetaColumna, miembroId, sesionId, reg) {
+            return `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="py-4 px-4 font-semibold text-slate-900">${etiquetaColumna}</td>
+                    <td class="py-4 px-4">
+                        <input type="checkbox" ${reg.asistio ? 'checked' : ''} 
+                            onchange="actualizarAsistencia('${miembroId}', '${sesionId}', 'asistio', this.checked)"
+                            class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                    </td>
+                    <td class="py-4 px-4">
+                        <input type="checkbox" ${reg.tienePermiso ? 'checked' : ''} 
+                            onchange="actualizarAsistencia('${miembroId}', '${sesionId}', 'tienePermiso', this.checked)"
+                            class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                    </td>
+                    <td class="py-4 px-4 space-y-1">
+                        ${reg.asistio ? `
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+                                <span class="text-xs text-slate-400 w-12">Llegada:</span>
+                                <input type="time" value="${reg.horaIngreso || ''}" 
+                                    onchange="actualizarAsistencia('${miembroId}', '${sesionId}', 'horaIngreso', this.value)"
+                                    class="border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none">
+                            </div>
+                        ` : ''}
+                        ${reg.asistio && reg.tienePermiso ? `
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center mt-1">
+                                <span class="text-xs text-indigo-500 w-12 font-medium">Límite:</span>
+                                <input type="time" value="${reg.horaPermisoLimite || ''}" 
+                                    onchange="actualizarAsistencia('${miembroId}', '${sesionId}', 'horaPermisoLimite', this.value)"
+                                    class="border border-indigo-200 bg-indigo-50 rounded px-1.5 py-0.5 text-xs focus:outline-none">
+                            </div>
+                        ` : ''}
+                        ${!reg.asistio ? '<span class="text-xs text-slate-400">N/A (Faltó)</span>' : ''}
+                    </td>
+                    <td class="py-4 px-4">
+                        <span class="font-bold ${reg.multa > 0 ? 'text-red-500' : 'text-slate-400'}">
+                            S/. ${(reg.multa || 0).toFixed(2)}
+                        </span>
+                    </td>
+                    <td class="py-4 px-4">
+                        ${reg.multa > 0 ? `
+                            <button onclick="actualizarAsistencia('${miembroId}', '${sesionId}', 'pagada', ${!reg.pagada})"
+                                class="text-xs font-bold py-1.5 px-3 rounded-full transition ${reg.pagada ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}">
+                                ${reg.pagada ? 'PAGADO ✓' : 'DEBE ⚠'}
+                            </button>
+                        ` : '<span class="text-xs text-slate-400">Sin deudas</span>'}
+                    </td>
+                </tr>
+            `;
         }
 
         function actualizarResumenCaja() {
