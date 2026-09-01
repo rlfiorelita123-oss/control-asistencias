@@ -229,9 +229,15 @@
                 Object.keys(data).forEach(key => {
                     fechas.push({ id: key, fecha: data[key].fecha });
                 });
-                // ORDENAR FECHAS DE MENOR A MAYOR (CRONOLÓGICO)
-                fechas.sort((a, b) => a.fecha.localeCompare(b.fecha));
+                
+                // ORDENAR FECHAS: MÁS RECIENTE PRIMERO, MÁS ANTIGUA AL FINAL
+                fechas.sort((a, b) => {
+                    const fechaA = new Date(a.fecha.includes('-') ? a.fecha : a.fecha.split('/').reverse().join('-'));
+                    const fechaB = new Date(b.fecha.includes('-') ? b.fecha : b.fecha.split('/').reverse().join('-'));
+                    return fechaB - fechaA; // Invertido para orden descendente
+                });
             }
+            
             renderizarFechas();
             actualizarSelectorSesion();
             cargarPlanilla();
